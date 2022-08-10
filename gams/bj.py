@@ -542,7 +542,7 @@ while(game_on):
 
     if winnings > 0:
         player_one_chips.payout(winnings)
-    if dealer_chips <= 0:
+    if dealer_chips.get_chips() <= 0:
         player_one.victory_message()
         exit(0)
 
