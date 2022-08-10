@@ -29,9 +29,11 @@ def play_ball(iters):
         if i < (iters - 1):
             val = randint(0,2)
             display_game(pos[val], False)
+            sleep(0.05)
         else:
             display_game(pos[val], True)
-    
+            sleep(0.05)
+
     return val
 
 # The Game
