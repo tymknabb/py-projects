@@ -1,4 +1,5 @@
 from os import system, name
+import numpy as np
 import re
 
 # Clear output on Windows/Linux shell
@@ -6,73 +7,86 @@ def clear():
     system('cls' if name == 'nt' else 'clear')
 
 # Display game state
-def display_board(board):
+def display(grid):
     print("")
-    print(f" {board[7]} ║ {board[8]} ║ {board[9]} ")
+    print(f" {grid[0][0]} ║ {grid[0][1]} ║ {grid[0][2]} ")
     print("═══╬═══╬═══")
-    print(f" {board[4]} ║ {board[5]} ║ {board[6]} ")
+    print(f" {grid[1][0]} ║ {grid[1][1]} ║ {grid[1][2]} ")
     print("═══╬═══╬═══")
-    print(f" {board[1]} ║ {board[2]} ║ {board[3]} ")
+    print(f" {grid[2][0]} ║ {grid[2][1]} ║ {grid[2][2]} ")
     print("")
 
-def input_move():
+def input_move(grid, char):
     choice = ''
+    flat_grid = np.flipud(grid).flatten()
 
     # Keep prompting for input 1-9 into an empty space
     while not re.search('^[1-9]$', choice):
-        choice = input("Choose a position using numpad 1-9: ")
-        if not re.search('^[1-9]$', choice):
+        try:
+            choice = input("Choose a position using numpad 1-9: ")
+            if choice == '0':
+                raise ValueError("Numbers 1-9 only.")
+            if flat_grid[int(choice) - 1].isspace():
+                flat_grid[int(choice) - 1] = char
+            else:
+                print(f"Position {choice} occupied. Please choose another position.")
+                choice = ''
+                continue
+        except:
             print("Invalid Input.")
-        elif not pos[int(choice)].isspace():
-            print(f"Position {choice} occupied. Please choose another position.")
             choice = ''
-            continue
 
-    return int(choice)
+    # Reverse our changes to the grid and return modified grid
+    return np.flipud(flat_grid.reshape(3, 3))
 
-def check_win_condition(pos):
-    # 3 'O' in a row
-    if ('O','O','O') in ((pos[1],pos[2],pos[3]),(pos[4],pos[5],pos[6]),(pos[7],pos[8],pos[9]),
-                         (pos[1],pos[4],pos[7]),(pos[2],pos[5],pos[8]),(pos[3],pos[6],pos[9]),
-                         (pos[1],pos[5],pos[9]),(pos[3],pos[5],pos[7])):
-        print("O's win!")
-        return True
-    # 3 'X' in a row
-    elif ('X','X','X') in ((pos[1],pos[2],pos[3]),(pos[4],pos[5],pos[6]),(pos[7],pos[8],pos[9]),
-                           (pos[1],pos[4],pos[7]),(pos[2],pos[5],pos[8]),(pos[3],pos[6],pos[9]),
-                           (pos[1],pos[5],pos[9]),(pos[3],pos[5],pos[7])):
-        print("X's win!")
-        return True
-    # No 3 in a row and 9 turns have passed
-    elif turn == 10:
+def check_win_condition(grid, turn):
+    
+    O_ROW = ['O','O','O']
+    X_ROW = ['X','X','X']
+
+    # Every time...
+    if turn == 10:
         print("Stalemate!")
         return True
-    # Keep playing
-    else:
-        return False
 
-# Initialize variables. Whitespace occupies each position initially
+    # Search matrix, transposed matrix, and diagonals for 3 X/Os
+    diagonals = [ grid.diagonal(), np.fliplr(grid).diagonal() ]
+    for matrix in [ grid, grid.T, diagonals ]:
+        for arr in matrix:
+            if np.array_equal(arr, O_ROW):
+                print("O's win!")
+                return True
+            elif np.array_equal(arr, X_ROW):
+                print("X's win!")
+                return True
+
+    # No wins, keep playing
+    return False
+
+# Initialize variables. Whitespace occupies each gridition initially
 is_gameover = False
-pos = [None,' ',' ',' ',' ',' ',' ',' ',' ',' ']
+grid = np.array([[' ',' ',' '],
+                 [' ',' ',' '],
+                 [' ',' ',' ']])
 turn = 1
 
 # Main game loop
 clear()
 while is_gameover == False:
     print(f"===TURN {turn}===")
-    display_board(pos)
+    display(grid)
 
     # X goes first
     if turn % 2 != 0:
         print("X's move.")
-        pos[input_move()] = 'X'
+        grid = input_move(grid, 'X')
         clear()
     else:
         print("O's move.")
-        pos[input_move()] = 'O'
+        grid = input_move(grid, 'O')
         clear()
     turn += 1
-    is_gameover = check_win_condition(pos)
+    is_gameover = check_win_condition(grid, turn)
 
-display_board(pos)
+display(grid)
 print(f"Game Over in {turn-1} turns.")
