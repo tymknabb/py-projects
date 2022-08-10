@@ -1,5 +1,5 @@
 from os import system, name
-import numpy as np
+import numpy as np # pip install numpy
 import re
 
 # Clear output on Windows/Linux shell
@@ -63,15 +63,15 @@ def check_win_condition(grid, turn):
     # No wins, keep playing
     return False
 
-# Initialize variables. Whitespace occupies each gridition initially
+# Whitespace occupies each cell initially
 is_gameover = False
 grid = np.array([[' ',' ',' '],
                  [' ',' ',' '],
                  [' ',' ',' ']])
-turn = 1
 
 # Main game loop
 clear()
+turn = 1
 while is_gameover == False:
     print(f"===TURN {turn}===")
     display(grid)
