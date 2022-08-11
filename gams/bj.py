@@ -74,7 +74,7 @@ class Player:
     def ins_payout(self, bet, bankroll, house):
         bankroll.credit(bet * 3)
         house.debit(bet * 2)
-        return f"{self.name} wins the insurance bet. Payout is 2:1.\n{self.name} wins ${bet * 3:.2f}."
+        return f"{self.name} wins the insurance bet. Payout is 2:1.\n{self.name} wins ${bet * 2:.2f}."
 
     def ins_loss(self, bet, house):
         house.credit(bet)
@@ -88,6 +88,18 @@ class Player:
 
     def add_hand(self, new_hand):
         self.hands.append(new_hand)
+
+    def setup_hands(self):
+        num_hands = ''
+        while not search('^\d$', num_hands):
+            try:
+                num_hands = input(f'Play how many hands? (Max: 4)\n')
+                if int(num_hands) > 4:
+                    raise ValueError('Max four hands in play.')
+            except:
+                print('Invalid Input.')
+                num_hands = ''
+        return num_hands
 
     def play(self, cur_deck, num_hands, bankroll=None, house=None):
         hand_ct = 0
@@ -173,6 +185,53 @@ class Player:
                 # Move on to next hand
                 hand.in_play = False
                 hand_ct += 1 
+
+    def resolve_hands(self, bankroll, house):
+        ins_bet = player_one_chips.get_ins_bet_amt()
+        insured = True if ins_bet > 0 else False
+        results = [ '\n**RESULTS**' ]
+        for idx, hand in enumerate(player_one.hands):
+            bet = bankroll.get_bet_amt(idx)
+            # Player bj pays out 3:2; wash if dealer also bj 
+            if hand.is_blackjack:
+                if not dealer_hand.is_blackjack:
+                    results.append(hand.blackjack(bankroll, house, bet, idx))
+                    hand.resolve()
+                    continue
+                results.append(hand.push(bankroll, bet, idx))
+                hand.resolve()
+                continue
+            # Yep, dealer still wins with a blackjack even if player stands at 21
+            elif dealer_hand.is_blackjack:
+                results.append(dealer_hand.blackjack(bankroll, house, bet, idx))
+                hand.resolve()
+                continue
+            # Player over 21: bet is forfeit
+            if hand.is_bust:
+                results.append(f'{player_one.name} {hand.idx_to_word(idx)} hand busts.\nHouse wins ${bet:.2f}.')
+            else:
+                dealer.play(new_deck, 1)
+                if dealer_hand.is_bust:
+                    results.append(dealer_hand.bust(bankroll, house, bet, idx))
+                elif hand.get_score() > dealer_hand.get_score():
+                    results.append(hand.won(bankroll, house, bet, idx))
+                elif hand.get_score() < dealer_hand.get_score():
+                    results.append(hand.lost(house, bet, idx))
+                else:
+                    results.append(hand.push(bankroll, bet, idx))
+            hand.resolve()
+        display_table('Round over.')
+
+        # Pay out 2:1 on insurance wager
+        if insured:
+            if dealer_hand.is_blackjack:
+                results.append(player_one.ins_payout(ins_bet, player_one_chips, house_chips))
+            else:
+                results.append(player_one.ins_loss(ins_bet, house_chips))
+            bankroll.ins_resolve()
+            display_table('Round over.')
+        
+        return results
 
 class Hand:
 
@@ -282,7 +341,7 @@ class Hand:
         if not self.owner.is_dealer:
             bankroll.credit(bet * 2.5)
             opfor.debit(bet * 1.5)
-            return f"{self.owner.name} {self.idx_to_word(idx)} hand BLACKJACK! Payout is 3:2.\n{bankroll.owner} wins ${bet * 2.5:.2f}."
+            return f"{self.owner.name} {self.idx_to_word(idx)} hand BLACKJACK! Payout is 3:2.\n{bankroll.owner} wins ${bet * 1.5:.2f}."
         opfor.credit(bet)
         return f"{self.owner.name} BLACKJACK! Dealer takes the pot.\n{opfor.owner} wins ${bet:.2f}."
 
@@ -292,11 +351,11 @@ class Hand:
             return f"{self.owner.name} {self.idx_to_word(idx)} hand busts! Dealer takes the pot.\n{opfor.owner} wins {bet:.2f}."
         bankroll.credit(bet * 2)
         opfor.debit(bet)
-        return f"{self.owner.name} busts! Payout is 1:1.\n{bankroll.owner} wins ${bet * 2:.2f}."
+        return f"{self.owner.name} busts! Payout is 1:1.\n{bankroll.owner} wins ${bet:.2f}."
 
     def push(self, bankroll, bet, idx):
         bankroll.credit(bet)
-        return f"{self.owner.name} {hand.idx_to_word(idx).capitalize()} hand PUSH!\n{self.owner.name} is returned his ${bet:.2f}."
+        return f"{self.owner.name} {hand.idx_to_word(idx)} hand PUSH!\n{self.owner.name} is returned his {hand.idx_to_word(idx)} bet."
 
     def lost(self, house, bet, idx):
         house.credit(bet)
@@ -305,7 +364,7 @@ class Hand:
     def won(self, bankroll, house, bet, idx):
         bankroll.credit(bet * 2)
         house.debit(bet)
-        return f"{self.owner.name} wins the {self.idx_to_word(idx)} hand! Payout is {('2' if self.is_doubled_down else '1')}:1.\n{self.owner.name} wins ${bet * 2:.2f}."
+        return f"{self.owner.name} wins the {self.idx_to_word(idx)} hand! Payout is {('2' if self.is_doubled_down else '1')}:1.\n{self.owner.name} wins ${bet:.2f}."
 
 class Bankroll:
 
@@ -318,6 +377,7 @@ class Bankroll:
         self.bets = []
         self.total_bet_amt = 0
         self.ins_bet_amt = 0
+        self.ins_resolved = False
 
     def __str__(self):
         if self.owner == 'House':
@@ -350,6 +410,9 @@ class Bankroll:
     def set_ins_bet_amt(self, amount):
         self.ins_bet_amt = amount
 
+    def ins_resolve(self):
+        self.ins_resolved = True
+
     def add_bet(self, bet):
         self.bets.append(bet)
 
@@ -359,7 +422,7 @@ class Bankroll:
             self.balance -= amount
             print(f'{self.owner} bets ${amount:.2f}.')
             return True
-        print('Not enough chips.')
+        display_table('Not enough chips.')
         return False
 
     def debit(self, amount):
@@ -396,7 +459,7 @@ class Bankroll:
                 if ins_bet_amt[::-1].find('.') > 2:
                     raise ValueError('Max two decimal places.')
                 if float(ins_bet_amt) > 0.5 * float(bet_amt):
-                    print('Insurance bet cannot be more than 50% of total bet.')
+                    display_table('Insurance bet cannot be more than 50% of total bet.')
                     ins_bet_amt = ''
                     continue
                 if self.bet(float(ins_bet_amt)):
@@ -404,7 +467,7 @@ class Bankroll:
                     return True
                 return False
             except:
-                print('Invalid Input.')
+                display_table('Invalid Input.')
                 ins_bet_amt = ''
 
     # Check for game over
@@ -433,7 +496,7 @@ def display_table(action = '', delay = 0):
     for idx, hand in enumerate(player_one.hands):
         if not hand.is_resolved:
             print(f'{hand.idx_to_word(idx).upper()} HAND BET: ${player_one_chips.get_bet_amt(idx):.2f}')
-    if player_one_chips.get_ins_bet_amt() > 0:
+    if player_one_chips.get_ins_bet_amt() > 0 and not player_one_chips.ins_resolved:
         print(f'INSURANCE: ${player_one_chips.get_ins_bet_amt():.2f}')
     print()
     print(player_one)
@@ -460,23 +523,14 @@ while(game_on):
     Bankroll.__init__(player_one_chips, player_one.name, player_one_chips.get_chips())
     Bankroll.__init__(house_chips, 'House', house_chips.get_chips())
 
-    # Setup deck
+    # Setup deck + dealer
     new_deck = Deck()
     new_deck.shuffle()
-
-    num_hands = ''
-    while not search('^\d$', num_hands):
-        try:
-            num_hands = input(f'Play how many hands? (Max: 4)\n')
-            if int(num_hands) > 4:
-                raise ValueError('Max four hands in play.')
-        except:
-            print('Invalid Input.')
-            num_hands = ''
-    
-    # Bettin phase
     dealer_hand = Hand(dealer)
     dealer.add_hand(dealer_hand)
+    
+    # Bettin phase
+    num_hands = player_one.setup_hands()
     for i in range(int(num_hands)):
         new_hand = Hand(player_one)
         player_one_chips.place_bets(new_hand, i, int(num_hands))
@@ -490,7 +544,6 @@ while(game_on):
             display_table('Dealing...', 0.25)
         dealer_hand.draw(new_deck)
         display_table('All cards dealt.')   
-
     # Check whether insurance is open (faceup A for dealer)
     if dealer_hand.cards[1].rank == 'A':
         player_one.set_insurance_flag(True)
@@ -501,52 +554,11 @@ while(game_on):
         dealer_hand.reveal()
         display_table(f'Dealer has {dealer_hand.score}.', 1)
 
-    # Resolve hands
-    ins_bet = player_one_chips.get_ins_bet_amt()
-    insured = True if ins_bet > 0 else False
-    results = [ '\n**RESULTS**' ]
-    for idx, hand in enumerate(player_one.hands):
-        bet = player_one_chips.get_bet_amt(idx)
-        # Player bj pays out 3:2; wash if dealer also bj 
-        if hand.is_blackjack:
-            if not dealer_hand.is_blackjack:
-                results.append(hand.blackjack(player_one_chips, house_chips, bet, idx))
-                continue
-            results.append(hand.push(player_one_chips, bet, idx))
-            continue
-        # Yep, dealer still wins with a blackjack even if player stands at 21
-        elif dealer_hand.is_blackjack:
-            results.append(dealer_hand.blackjack(player_one_chips, house_chips, bet, idx))
-            continue
-        # Player over 21: bet is forfeit
-        if hand.is_bust:
-            if hand.is_resolved:
-                results.append(f'{player_one.name} {hand.idx_to_word(idx)} hand busts.\nHouse wins ${bet:.2f}.')
-            else:
-                results.append(hand.bust(player_one_chips, house_chips, bet, idx))
-        else:
-            dealer.play(new_deck, 1)
-            if dealer_hand.is_bust:
-                results.append(dealer_hand.bust(player_one_chips, house_chips, bet, idx))
-            elif hand.get_score() > dealer_hand.get_score():
-                results.append(hand.won(player_one_chips, house_chips, bet, idx))
-            elif hand.get_score() < dealer_hand.get_score():
-                results.append(hand.lost(house_chips, bet, idx))
-            else:
-                results.append(hand.push(player_one_chips, bet, idx))
-        hand.resolve()
-    display_table('Round over.')
+    # Evaluate results
+    results = player_one.resolve_hands(player_one_chips, house_chips)
     for msg in results:
         print(msg)
         sleep(0.125)
-    
-    # Pay out 2:1 on insurance wager
-    if insured:
-        if dealer_hand.is_blackjack:
-            msg = player_one.ins_payout(ins_bet, player_one_chips, house_chips)
-        else:
-            msg = player_one.ins_loss(ins_bet, house_chips)
-        print(msg)
 
     # Good luck with that
     if house_chips.get_chips() <= 0:
