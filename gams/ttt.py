@@ -26,12 +26,11 @@ def input_move(grid, char):
             choice = input("Choose a position using numpad 1-9: ")
             if choice == '0':
                 raise ValueError("Numbers 1-9 only.")
-            if flat_grid[int(choice) - 1].isspace():
-                flat_grid[int(choice) - 1] = char
-            else:
+            if not flat_grid[int(choice) - 1].isspace():
                 print(f"Position {choice} occupied. Please choose another position.")
                 choice = ''
                 continue
+            flat_grid[int(choice) - 1] = char
         except:
             print("Invalid Input.")
             choice = ''
