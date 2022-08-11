@@ -12,6 +12,7 @@
 ### REV11: Support for playing multiple hands from the start
 ### REV12: Refactoring: hit(), double_down() & split() in Hand, insurance routine in Player
 ### REV13: Touched up play() routine, made split not so buggy
+### REV14: Major refactor, all revisions in the repo moving forward
 
 from os import system, name
 from re import search
@@ -70,11 +71,14 @@ class Player:
         print('As you are roundly beaten within an inch of your life, you catch a fleeting glimpse of your hard-won winnings and sigh. Now how will you pave the driveway?\n')
         print(f'{self.name} WINS!')
 
-    def ins_win_message(self):
-        print(f'{self.name} wins the insurance bet. Payout is 2:1.')
+    def ins_payout(self, bet, bankroll, house):
+        bankroll.credit(bet * 3)
+        house.debit(bet * 2)
+        return f"{self.name} wins the insurance bet. Payout is 2:1.\n{self.name} wins ${bet * 3:.2f}."
 
-    def ins_lose_message(self):
-        print(f'{self.name} loses the insurance bet.')
+    def ins_loss(self, bet, house):
+        house.credit(bet)
+        return f"{self.name} loses the insurance bet.\nHouse wins ${bet:.2f}."
 
     def get_insurance_flag(self):
         return self.insurance_open
@@ -85,23 +89,24 @@ class Player:
     def add_hand(self, new_hand):
         self.hands.append(new_hand)
 
-    def play(self, bankroll, cur_deck, num_hands):
+    def play(self, cur_deck, num_hands, bankroll=None, house=None):
         hand_ct = 0
 
         # Dealer's play
         if self.is_dealer:
-            display_table()
             d_hand = self.hands[0]
             while d_hand.get_score() < 17:
                 d_hand.draw(cur_deck)
-                sleep(1)
-
+                display_table('Dealer hits.', 1)
+                if d_hand.is_bust:
+                    display_table('Dealer busts.')
+            
         # Player's play
         else:
             while hand_ct < num_hands:
                 hand = self.hands[hand_ct]
                 hand.in_play = True
-                display_table()
+                display_table(f'Action to {self.name}.')
 
                 # Can't double down on pocket aces, can only split pairs to a max of 4 hands
                 double_legal = False if all(card.rank == 'A' for card in hand.cards) else True
@@ -124,34 +129,33 @@ class Player:
                         # Hit
                         case '1':
                             hand.draw(cur_deck)
-                            print(f'{self.name} hits.')
-                            sleep(0.5)
+                            display_table(f'{self.name} hits.', 0.5)
                             if hand.is_bust:
-                                hand.bust_message(hand_ct)
-                                sleep(1)
+                                hand.bust(bankroll, house, bankroll.get_bet_amt(hand_ct), hand_ct)
+                                hand.resolve()
+                                display_table(f'BUST! {hand.idx_to_word(hand_ct).capitalize()} bet is forfeit.', 1)
                         # Stay
                         case '2':
-                            print(f'{self.name} stands.')
-                            sleep(0.5)
+                            display_table(f'{self.name} stands.', 1)
                             break
                         # Double down on any two cards, draw once
                         case '3' if double_legal and turn_ct == 0:
                             doubled = hand.double_down(hand_ct, cur_deck, bankroll)
                             if not doubled:
                                 continue
-                            print(f'{self.name} doubles down.')
-                            sleep(0.5)
+                            display_table(f'{self.name} doubles down.', 0.5)
                             if hand.is_bust:
-                                hand.bust_message(hand_ct)
-                                sleep(1)
+                                hand.bust(bankroll, house, bankroll.get_bet_amt(hand_ct), hand_ct)
+                                hand.resolve()
+                                display_table(f'BUST! {hand.idx_to_word(hand_ct).capitalize()} bet is forfeit.', 1)
                             break
                         # Buy insurance (if dealer showing A)
                         case '4' if insurance_legal and bankroll.get_chips() > 0:
                             insured = bankroll.buy_insurance(bankroll.get_total_bet_amt())
                             if not insured:
                                 continue
-                            self.set_insurance_flag(False)
-                            display_table()
+                            insurance_legal = False
+                            display_table('Insurance purchased.')
                             continue
                         # Split a pair
                         case '5' if split_legal and turn_ct == 0:
@@ -160,17 +164,15 @@ class Player:
                                 self.add_hand(spl_hand)
                                 num_hands += 1
                                 split_legal = False
-                                display_table()
-                                print(f'{self.name} splits.')
-                                sleep(0.5)
+                                display_table(f'{self.name} splits a pair.')
                             continue
                         case _:
-                            print('Invalid Input.')
+                            display_table('Invalid Input.')
                             continue
                     turn_ct += 1
                 # Move on to next hand
                 hand.in_play = False
-                hand_ct += 1
+                hand_ct += 1 
 
 class Hand:
 
@@ -181,6 +183,7 @@ class Hand:
         self.score = 0
         self.cards = []
         self.in_play = False
+        self.is_resolved = False
         self.is_blackjack = False
         self.is_bust = False
         self.is_doubled_down = False
@@ -200,29 +203,8 @@ class Hand:
                 hand_repr += ' ' * idx + str(card) + '\n'
         return f'Score: {(self.score if not self.hidden else "?")} {("← In-Play" if self.in_play else "")}\n{hand_repr}'
 
-    def blackjack_message(self, idx):
-        if not self.owner.is_dealer:
-            print(f'{self.owner.name}\'s {self.idx_to_word(idx)} hand BLACKJACK! Payout is 3:2.')
-        else:
-            print(f'{self.owner.name} BLACKJACK! Dealer takes the pot.')
-
-    def bust_message(self, idx):
-        if not self.owner.is_dealer:
-            print(f'{self.owner.name}\'s {self.idx_to_word(idx)} hand busts! Dealer takes the pot.')
-        else:
-            print(f'{self.owner.name} busts! Payout is 1:1.')
-
-    def push_message(self, idx):
-        print(f'{hand.idx_to_word(idx).capitalize()} hand PUSH! {self.owner.name} receives no payout.')
-
-    def lose_message(self, idx):
-        print(f'{self.owner.name} loses the {self.idx_to_word(idx)} hand! Dealer takes the pot.')        
-
-    def win_message(self, idx):
-        if self.is_doubled_down:
-            print(f'{self.owner.name} wins the {self.idx_to_word(idx)} hand! Payout is 2:1.')
-        else:
-            print(f'{self.owner.name} wins the {self.idx_to_word(idx)} hand! Payout is 1:1.')
+    def resolve(self):
+        self.is_resolved = True
 
     def reveal(self):
         self.hidden = False
@@ -267,7 +249,6 @@ class Hand:
     def draw(self, cur_deck):
         self.add_cards(cur_deck.deal_one())
         self.calc_score()
-        display_table()
 
     def double_down(self, cur_idx, cur_deck, bankroll):
         enough = bankroll.bet(bankroll.get_bet_amt(cur_idx))
@@ -286,17 +267,45 @@ class Hand:
             # New hand object, populate with second card from first hand
             second_hand = Hand(self.owner)
             second_hand.add_cards(self.cards.pop())
-            
+            display_table(f'{self.owner.name} splits a pair.')
             # Each hand is dealt an additional card
-            self.add_cards(cur_deck.deal_one())
-            self.calc_score()
-            second_hand.add_cards(cur_deck.deal_one())
-            second_hand.calc_score()
+            for subhand in [ self, second_hand ]:
+                subhand.draw(cur_deck)
+                display_table(f'{self.owner.name} splits a pair.', 0.25)
             
             bankroll.add_bet(bankroll.get_bet_amt(cur_idx))
             return second_hand
         # No money no hand
         return None
+
+    def blackjack(self, bankroll, opfor, bet, idx):
+        if not self.owner.is_dealer:
+            bankroll.credit(bet * 2.5)
+            opfor.debit(bet * 1.5)
+            return f"{self.owner.name} {self.idx_to_word(idx)} hand BLACKJACK! Payout is 3:2.\n{bankroll.owner} wins ${bet * 2.5:.2f}."
+        opfor.credit(bet)
+        return f"{self.owner.name} BLACKJACK! Dealer takes the pot.\n{opfor.owner} wins ${bet:.2f}."
+
+    def bust(self, bankroll, opfor, bet, idx):
+        if not self.owner.is_dealer:
+            opfor.credit(bet)
+            return f"{self.owner.name} {self.idx_to_word(idx)} hand busts! Dealer takes the pot.\n{opfor.owner} wins {bet:.2f}."
+        bankroll.credit(bet * 2)
+        opfor.debit(bet)
+        return f"{self.owner.name} busts! Payout is 1:1.\n{bankroll.owner} wins ${bet * 2:.2f}."
+
+    def push(self, bankroll, bet, idx):
+        bankroll.credit(bet)
+        return f"{self.owner.name} {hand.idx_to_word(idx).capitalize()} hand PUSH!\n{self.owner.name} is returned his ${bet:.2f}."
+
+    def lost(self, house, bet, idx):
+        house.credit(bet)
+        return f"{self.owner.name} loses the {self.idx_to_word(idx)} hand! Dealer takes the pot.\n{house.owner} wins ${bet:.2f}."
+
+    def won(self, bankroll, house, bet, idx):
+        bankroll.credit(bet * 2)
+        house.debit(bet)
+        return f"{self.owner.name} wins the {self.idx_to_word(idx)} hand! Payout is {('2' if self.is_doubled_down else '1')}:1.\n{self.owner.name} wins ${bet * 2:.2f}."
 
 class Bankroll:
 
@@ -357,9 +366,8 @@ class Bankroll:
         self.balance -= amount
 
     # Gib moni
-    def payout(self, amount):
+    def credit(self, amount):
         self.balance += amount
-        print(f'{self.owner} wins ${amount:.2f}.')
 
     # Betting Phase
     def place_bets(self, hand, idx, num_hands):
@@ -418,12 +426,13 @@ def clear():
     system('cls' if name == 'nt' else 'clear') 
 
 # Display game state
-def display_table():
+def display_table(action = '', delay = 0):
     clear()
     print(player_one_chips)
-    print(dealer_chips) 
+    print(house_chips) 
     for idx, hand in enumerate(player_one.hands):
-        print(f'{hand.idx_to_word(idx).upper()} HAND BET: ${player_one_chips.get_bet_amt(idx):.2f}')
+        if not hand.is_resolved:
+            print(f'{hand.idx_to_word(idx).upper()} HAND BET: ${player_one_chips.get_bet_amt(idx):.2f}')
     if player_one_chips.get_ins_bet_amt() > 0:
         print(f'INSURANCE: ${player_one_chips.get_ins_bet_amt():.2f}')
     print()
@@ -432,13 +441,16 @@ def display_table():
         print(str(hand)) 
     print(dealer)
     print(str(dealer_hand))
+    if action:
+        print(action)
+    sleep(delay)
 
 # Populate players
 player_one = Player(input("Enter your name: "), False)
 player_one_chips = Bankroll(player_one.name, Bankroll.INITIAL_CHIPS)
 
 dealer = Player('Dealer', True)
-dealer_chips = Bankroll('House', Bankroll.HOUSE_CHIPS)
+house_chips = Bankroll('House', Bankroll.HOUSE_CHIPS)
 
 game_on = True
 while(game_on):
@@ -446,7 +458,7 @@ while(game_on):
     Player.__init__(player_one, player_one.name, False)
     Player.__init__(dealer, dealer.name, True)
     Bankroll.__init__(player_one_chips, player_one.name, player_one_chips.get_chips())
-    Bankroll.__init__(dealer_chips, 'House', dealer_chips.get_chips())
+    Bankroll.__init__(house_chips, 'House', house_chips.get_chips())
 
     # Setup deck
     new_deck = Deck()
@@ -462,87 +474,82 @@ while(game_on):
             print('Invalid Input.')
             num_hands = ''
     
-    # Bet n' deal
+    # Bettin phase
     dealer_hand = Hand(dealer)
+    dealer.add_hand(dealer_hand)
     for i in range(int(num_hands)):
         new_hand = Hand(player_one)
         player_one_chips.place_bets(new_hand, i, int(num_hands))
         player_one.add_hand(new_hand)
     player_one_chips.calc_total_bet_amt()
+    
     # Deal in the proper order (one each hand, Dealer's hole, one each hand, Dealer's faceup)
-    for i in range(2):
+    for i in range(2):    
         for hand in player_one.hands:
-            hand.add_cards(new_deck.deal_one())
-        dealer_hand.add_cards(new_deck.deal_one())
-    for hand in player_one.hands:
-        hand.calc_score()
-    dealer_hand.calc_score()
-    dealer.add_hand(dealer_hand)
-    display_table()
+            hand.draw(new_deck)
+            display_table('Dealing...', 0.25)
+        dealer_hand.draw(new_deck)
+        display_table('All cards dealt.')   
 
     # Check whether insurance is open (faceup A for dealer)
     if dealer_hand.cards[1].rank == 'A':
         player_one.set_insurance_flag(True)
 
     # Play text game
-    player_one.play(player_one_chips, new_deck, int(num_hands))    
-    dealer_hand.reveal()
-    display_table()
+    player_one.play(new_deck, int(num_hands), player_one_chips, house_chips)
+    if not all(hand.is_bust == True for hand in player_one.hands):
+        dealer_hand.reveal()
+        display_table(f'Dealer has {dealer_hand.score}.', 1)
 
     # Resolve hands
     ins_bet = player_one_chips.get_ins_bet_amt()
     insured = True if ins_bet > 0 else False
-    winnings = 0
+    results = [ '\n**RESULTS**' ]
     for idx, hand in enumerate(player_one.hands):
         bet = player_one_chips.get_bet_amt(idx)
         # Player bj pays out 3:2; wash if dealer also bj 
         if hand.is_blackjack:
             if not dealer_hand.is_blackjack:
-                hand.blackjack_message(idx)
-                winnings += bet * 2.5
-                dealer_chips.debit(bet * 1.5)
-            else:
-                hand.push_message(idx)
-                winnings += bet
-        # Player over 21: bet is forfeit
-        elif hand.is_bust:
-            hand.bust_message(idx)
-            dealer_chips.payout(bet)             
+                results.append(hand.blackjack(player_one_chips, house_chips, bet, idx))
+                continue
+            results.append(hand.push(player_one_chips, bet, idx))
+            continue
         # Yep, dealer still wins with a blackjack even if player stands at 21
         elif dealer_hand.is_blackjack:
-            dealer_hand.blackjack_message(idx)
-            dealer_chips.payout(bet)
-        else:    
-            dealer.play(dealer_chips, new_deck, 1)
-            if dealer_hand.is_bust:
-                dealer_hand.bust_message(idx)
-                winnings += bet * 2
-                dealer_chips.debit(bet)
-            elif hand.get_score() > dealer_hand.get_score():
-                hand.win_message(idx)
-                winnings += bet * 2
-                dealer_chips.debit(bet)
-            elif hand.get_score() < dealer_hand.get_score():
-                hand.lose_message(idx)
-                dealer_chips.payout(bet)
+            results.append(dealer_hand.blackjack(player_one_chips, house_chips, bet, idx))
+            continue
+        # Player over 21: bet is forfeit
+        if hand.is_bust:
+            if hand.is_resolved:
+                results.append(f'{player_one.name} {hand.idx_to_word(idx)} hand busts.\nHouse wins ${bet:.2f}.')
             else:
-                hand.push_message(idx)
-                winnings += bet
-
+                results.append(hand.bust(player_one_chips, house_chips, bet, idx))
+        else:
+            dealer.play(new_deck, 1)
+            if dealer_hand.is_bust:
+                results.append(dealer_hand.bust(player_one_chips, house_chips, bet, idx))
+            elif hand.get_score() > dealer_hand.get_score():
+                results.append(hand.won(player_one_chips, house_chips, bet, idx))
+            elif hand.get_score() < dealer_hand.get_score():
+                results.append(hand.lost(house_chips, bet, idx))
+            else:
+                results.append(hand.push(player_one_chips, bet, idx))
+        hand.resolve()
+    display_table('Round over.')
+    for msg in results:
+        print(msg)
+        sleep(0.125)
+    
     # Pay out 2:1 on insurance wager
     if insured:
         if dealer_hand.is_blackjack:
-            player_one.ins_win_message()
-            winnings += ins_bet * 3
-            dealer_chips.debit(ins_bet * 2)
+            msg = player_one.ins_payout(ins_bet, player_one_chips, house_chips)
         else:
-            player_one.ins_lose_message()
-            dealer_chips.payout(ins_bet)
-            sleep(1)
+            msg = player_one.ins_loss(ins_bet, house_chips)
+        print(msg)
 
-    if winnings > 0:
-        player_one_chips.payout(winnings)
-    if dealer_chips.get_chips() <= 0:
+    # Good luck with that
+    if house_chips.get_chips() <= 0:
         player_one.victory_message()
         exit(0)
 
