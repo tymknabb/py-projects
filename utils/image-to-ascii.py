@@ -50,6 +50,7 @@ if __name__ == '__main__':
         img.load()
     except:
         print(f"{path} is an invalid path.")
+        exit(1)
 
     # Convert image to ascii
     new_img_data = pixels_to_ascii(greyscale(resize_img(img, width)))
