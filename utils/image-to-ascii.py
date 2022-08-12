@@ -5,9 +5,8 @@ import argparse
 
 # Usage: image-to-ascii.py [ -r ] [ IMAGE FILE ]
 
-#CHARLIST = ["@","%","#","*","+","=","-","/","."," "]
-#CHARLIST = ["@","#","$","%","&","8","E","H","W","0","*","F","L","T","w","h","e","o","c","t","f","l","~","+","=","-","."," "," "]
-CHARLIST = ["@","#","$","%","&","8","B","M","W","*","m","w","q","p","d","b","k","h","a","o","Q","0","O","Z","X","Y","U","J","C","L","t","f","j","z","x","n","u","v","c","r","[","]","{","}","1","(",")","|","\\","/","?","I","l","!","i","<",">","+","_","-","~",";","\"",":","^",",","`","'","."," "," "," "," "," "," "," "," "," "," "," "," "," "," "," "," "," "]
+BRT_INTERVAL = 5
+charlist = [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '.', "'", '`', ',', '^', ':', '"', ';', '~', '-', '_', '+', '>', '<', 'i', '!', 'l', 'I', '?', '/', '\\', '|', ')', '(', '1', '}', '{', ']', '[', 'r', 'c', 'v', 'u', 'n', 'x', 'z', 'j', 'f', 't', 'L', 'C', 'J', 'U', 'Y', 'X', 'Z', 'O', '0', 'Q', 'o', 'a', 'h', 'k', 'b', 'd', 'p', 'q', 'w', 'm', '*', 'W', 'M', 'B', '8', '&', '%', '$', '#', '@']
 
 # Resize image according to new width
 def resize_img(img, new_width):
@@ -24,21 +23,26 @@ def greyscale(img):
 # Map pixel data to character list
 def pixels_to_ascii(img):
     pixels = img.getdata()
-    grades = -(-256 // len(CHARLIST))
-    chars = "".join([CHARLIST[pixel // grades] for pixel in pixels])
+    grades = -(-256 // len(charlist))
+    chars = "".join([charlist[pixel // grades] for pixel in pixels])
     return chars
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(prog='image-to-ascii.py', description='Converts images to ascii art.')
-    parser.add_argument('-r', '--reverse', action='store_true', help='Color Negative: Reverses the character list.')
-    parser.add_argument('-w', '--width', default=125, type=int, help='Specify desired character width of ascii art.')
+    parser.add_argument('-r', '--reverse', action='store_true', help='Photo negative: Reverses the character list. Higher brightness levels will make the image dimmer.')
+    parser.add_argument('-w', '--width', default=125, type=int, help='Specify desired character width of ascii art. Default: 125.')
+    parser.add_argument('-b', '--brightness', default=0, type=int, choices=range(0,11), help='Specify desired brightness level from 0-10 inclusive. Default: 0.')
     parser.add_argument('path', help='Path to image file. Use jpg/png files for best results.')
     args = parser.parse_args()
 
     if args.reverse:
-        CHARLIST.reverse()
+        charlist.reverse()
     width = args.width
+
+    for idx in range(args.brightness):
+        for idx in range(BRT_INTERVAL):
+            del charlist[0]
 
     path = args.path
     try:
