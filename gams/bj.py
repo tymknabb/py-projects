@@ -8,10 +8,10 @@
 ### REV7: Support decimals for some reason
 ### REV8: Ensure insurance pays out once
 ### REV9: Dealer has finite pool of chips for possible future 'win' condition
-### REV10: Large refactor, place_bets() in Bankroll and play(), double_down() & split() in Player
+### REV10: Large refactor, place_bets() in Bankroll and play_hands(), double_down() & split() in Player
 ### REV11: Support for playing multiple hands from the start
 ### REV12: Refactoring: hit(), double_down() & split() in Hand, insurance routine in Player
-### REV13: Touched up play() routine, made split not so buggy
+### REV13: Touched up play_hands() routine, made split not so buggy
 ### REV14: Major refactor, all revisions in the repo moving forward
 
 from os import system, name
@@ -101,7 +101,7 @@ class Player:
                 num_hands = ''
         return num_hands
 
-    def play(self, cur_deck, num_hands, bankroll=None, house=None):
+    def play_hands(self, cur_deck, num_hands, bankroll=None, house=None):
         hand_ct = 0
 
         # Dealer's play
@@ -130,7 +130,7 @@ class Player:
                 while hand.get_score() <= 21:
                     # Re-check legality, grey out illegal options
                     insurance_legal = self.get_insurance_flag()
-                    if num_hands == 4: 
+                    if num_hands > 3: 
                         split_legal = False 
                     if not split_legal or turn_ct > 0:
                         prompt = prompt.replace('5. Split', '\033[90m' + '5. Split' + '\033[39m')
@@ -212,7 +212,7 @@ class Player:
             if hand.is_bust:
                 results.append(f'{player_one.name} {hand.idx_to_word(idx)} hand busts.\nHouse wins ${bet:.2f}.')
             else:
-                dealer.play(new_deck, 1)
+                dealer.play_hands(new_deck, 1)
                 if dealer_hand.is_bust:
                     results.append(dealer_hand.bust(bankroll, house, bet, idx))
                 elif hand.get_score() > dealer_hand.get_score():
@@ -551,7 +551,7 @@ while(game_on):
         player_one.set_insurance_flag(True)
 
     # Play text game
-    player_one.play(new_deck, int(num_hands), player_one_chips, house_chips)
+    player_one.play_hands(new_deck, int(num_hands), player_one_chips, house_chips)
     if not all(hand.is_bust == True for hand in player_one.hands):
         dealer_hand.reveal()
         display_table(f'Dealer has {dealer_hand.score}.', 1)
