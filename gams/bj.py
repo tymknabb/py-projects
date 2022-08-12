@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # BLACKJACK
 ### REV1: Refactoring, adding and integrating "Hand" object
 ### REV2: Compatibility with cmd/powershell/Linux shells, roll clear() into display_table()
@@ -107,11 +109,14 @@ class Player:
         # Dealer's play
         if self.is_dealer:
             d_hand = self.hands[0]
+            d_hand.reveal()
+            display_table(f'Dealer has {dealer_hand.score}.', 1)
             while d_hand.get_score() < 17:
                 d_hand.draw(cur_deck)
                 display_table('Dealer hits.', 1)
                 if d_hand.is_bust:
                     display_table('Dealer busts.')
+            d_hand.resolve()
             
         # Player's play
         else:
@@ -170,16 +175,16 @@ class Player:
                             if not insured:
                                 continue
                             self.set_insurance_flag(False)
-                            display_table('Insurance purchased.')
-                            continue
+                            display_table('Insurance purchased.', 1)
+                            break
                         # Split a pair
                         case '5' if split_legal and len(hand.cards) == 2:
                             spl_hand = hand.split(hand_ct, cur_deck, bankroll)
-                            if isinstance(spl_hand, Hand):
-                                self.add_hand(spl_hand)
-                                num_hands += 1
-                                display_table(f'{self.name} splits a pair.')
-                            continue
+                            if not isinstance(spl_hand, Hand):
+                                continue
+                            self.add_hand(spl_hand)
+                            num_hands += 1
+                            display_table(f'{self.name} splits a pair.')
                         case _:
                             display_table('Invalid Input.')
                             continue
@@ -188,51 +193,58 @@ class Player:
                 hand.in_play = False
                 hand_ct += 1 
 
-    def resolve_hands(self, bankroll, house):
+    def resolve_hands(self, dealer, bankroll, house):
+        d_hand = dealer.hands[0]
         ins_bet = bankroll.get_ins_bet_amt()
         insured = True if ins_bet > 0 else False
         results = [ '\n**RESULTS**' ]
+
+        # Pay out 2:1 on insurance wager
+        if insured:
+            if d_hand.is_blackjack:
+                d_hand.reveal()
+                display_table('Insurance pays out.')
+                results.append(player_one.ins_payout(ins_bet, player_one_chips, house_chips))
+            else:
+                display_table('Insurance is forfeit.')
+                results.append(player_one.ins_loss(ins_bet, house_chips))
+            bankroll.ins_resolve()
+
         for idx, hand in enumerate(player_one.hands):
             bet = bankroll.get_bet_amt(idx)
             # Player bj pays out 3:2; wash if dealer also bj 
             if hand.is_blackjack:
-                if not dealer_hand.is_blackjack:
+                if not d_hand.is_blackjack:
                     results.append(hand.blackjack(bankroll, house, bet, idx))
                     hand.resolve()
                     continue
+                d_hand.reveal()
                 results.append(hand.push(bankroll, bet, idx))
                 hand.resolve()
                 continue
             # Yep, dealer still wins with a blackjack even if player stands at 21
-            elif dealer_hand.is_blackjack:
-                results.append(dealer_hand.blackjack(bankroll, house, bet, idx))
+            elif d_hand.is_blackjack:
+                d_hand.reveal()
+                results.append(d_hand.blackjack(bankroll, house, bet, idx))
                 hand.resolve()
                 continue
             # Player over 21: bet is forfeit
             if hand.is_bust:
                 results.append(f'{player_one.name} {hand.idx_to_word(idx)} hand busts.\nHouse wins ${bet:.2f}.')
             else:
-                dealer.play_hands(new_deck, 1)
-                if dealer_hand.is_bust:
-                    results.append(dealer_hand.bust(bankroll, house, bet, idx))
-                elif hand.get_score() > dealer_hand.get_score():
+                if not d_hand.is_resolved:
+                    dealer.play_hands(new_deck, 1)
+                if d_hand.is_bust:
+                    results.append(d_hand.bust(bankroll, house, bet, idx))
+                elif hand.get_score() > d_hand.get_score():
                     results.append(hand.won(bankroll, house, bet, idx))
-                elif hand.get_score() < dealer_hand.get_score():
+                elif hand.get_score() < d_hand.get_score():
                     results.append(hand.lost(house, bet, idx))
                 else:
                     results.append(hand.push(bankroll, bet, idx))
             hand.resolve()
+       
         display_table('Round over.')
-
-        # Pay out 2:1 on insurance wager
-        if insured:
-            if dealer_hand.is_blackjack:
-                results.append(player_one.ins_payout(ins_bet, player_one_chips, house_chips))
-            else:
-                results.append(player_one.ins_loss(ins_bet, house_chips))
-            bankroll.ins_resolve()
-            display_table('Round over.')
-        
         return results
 
 class Hand:
@@ -249,26 +261,26 @@ class Hand:
         self.is_bust = False
         self.is_doubled_down = False
         if self.owner.is_dealer:
-            self.hidden = True
+            self.is_hidden = True
         else:
-            self.hidden = False
+            self.is_hidden = False
 
     def __str__(self):
         hand_repr = ''
         for idx, card in enumerate(self.cards):
             # Hide dealer's first card
-            if idx == 0 and self.hidden:
+            if idx == 0 and self.is_hidden:
                 hand_repr += '|??|\n'
             else:
                 # String multiplication to make that hand POP
                 hand_repr += ' ' * idx + str(card) + '\n'
-        return f'Score: {(self.score if not self.hidden else "?")} {("← In-Play" if self.in_play else "")}\n{hand_repr}'
+        return f'Score: {(self.score if not self.is_hidden else "?")} {("← In-Play" if self.in_play else "")}\n{hand_repr}'
 
     def resolve(self):
         self.is_resolved = True
 
     def reveal(self):
-        self.hidden = False
+        self.is_hidden = False
 
     def idx_to_word(self, idx):
         return self.NUM_MAP[idx]
@@ -552,12 +564,9 @@ while(game_on):
 
     # Play text game
     player_one.play_hands(new_deck, int(num_hands), player_one_chips, house_chips)
-    if not all(hand.is_bust == True for hand in player_one.hands):
-        dealer_hand.reveal()
-        display_table(f'Dealer has {dealer_hand.score}.', 1)
 
     # Evaluate results
-    results = player_one.resolve_hands(player_one_chips, house_chips)
+    results = player_one.resolve_hands(dealer, player_one_chips, house_chips)
     for msg in results:
         print(msg)
         sleep(0.125)
