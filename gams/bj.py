@@ -189,7 +189,7 @@ class Player:
                 hand_ct += 1 
 
     def resolve_hands(self, bankroll, house):
-        ins_bet = player_one_chips.get_ins_bet_amt()
+        ins_bet = bankroll.get_ins_bet_amt()
         insured = True if ins_bet > 0 else False
         results = [ '\n**RESULTS**' ]
         for idx, hand in enumerate(player_one.hands):
