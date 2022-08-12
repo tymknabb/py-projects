@@ -128,7 +128,10 @@ class Player:
                 prompt = "What will you do? \n 1. Hit \n 2. Stand \n 3. Double Down \n 4. Insurance \n 5. Split \n"
                 choice = '' ; turn_ct = 0
                 while hand.get_score() <= 21:
-                    # Grey out illegal options
+                    # Re-check legality, grey out illegal options
+                    insurance_legal = self.get_insurance_flag()
+                    if num_hands == 4: 
+                        split_legal = False 
                     if not split_legal or turn_ct > 0:
                         prompt = prompt.replace('5. Split', '\033[90m' + '5. Split' + '\033[39m')
                     if not insurance_legal:
@@ -166,16 +169,15 @@ class Player:
                             insured = bankroll.buy_insurance(bankroll.get_total_bet_amt())
                             if not insured:
                                 continue
-                            insurance_legal = False
+                            self.set_insurance_flag(False)
                             display_table('Insurance purchased.')
                             continue
                         # Split a pair
-                        case '5' if split_legal and turn_ct == 0:
+                        case '5' if split_legal and len(hand.cards) == 2:
                             spl_hand = hand.split(hand_ct, cur_deck, bankroll)
                             if isinstance(spl_hand, Hand):
                                 self.add_hand(spl_hand)
                                 num_hands += 1
-                                split_legal = False
                                 display_table(f'{self.name} splits a pair.')
                             continue
                         case _:
@@ -324,16 +326,16 @@ class Hand:
         # Player must have enough to bet the same amount into the second hand
         if enough:
             # New hand object, populate with second card from first hand
-            second_hand = Hand(self.owner)
-            second_hand.add_cards(self.cards.pop())
+            subhand = Hand(self.owner)
+            subhand.add_cards(self.cards.pop())
             display_table(f'{self.owner.name} splits a pair.')
             # Each hand is dealt an additional card
-            for subhand in [ self, second_hand ]:
+            for subhand in [ self, subhand ]:
                 subhand.draw(cur_deck)
                 display_table(f'{self.owner.name} splits a pair.', 0.25)
             
             bankroll.add_bet(bankroll.get_bet_amt(cur_idx))
-            return second_hand
+            return subhand
         # No money no hand
         return None
 
