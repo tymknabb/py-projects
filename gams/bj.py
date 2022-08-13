@@ -585,3 +585,4 @@ while(game_on):
     continue
 
 print("\n**GAME OVER**")
+sleep(3)
