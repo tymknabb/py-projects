@@ -574,7 +574,7 @@ while(game_on):
     # Good luck with that
     if house_chips.get_chips() <= 0:
         player_one.victory_message()
-        exit(0)
+        break
 
     # Clean up after ourselves
     del new_deck
