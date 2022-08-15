@@ -88,14 +88,14 @@ class Player:
     def set_insurance_flag(self, flag):
         self.insurance_open = flag
 
-    def add_hand(self, new_hand):
-        self.hands.append(new_hand)
+    def add_hand(self, idx, new_hand):
+        self.hands.insert(idx, new_hand)
 
-    def setup_hands(self):
+    def setup_hands(self, bankroll):
         num_hands = ''
         while not search('^\d$', num_hands):
             try:
-                num_hands = input(f'Play how many hands? (Max: 4)\n')
+                num_hands = input(f'{self.name} has ${bankroll.get_chips():.2f} in chips.\nPlay how many hands? (Max: 4)\n')
                 if int(num_hands) > 4:
                     raise ValueError('Max four hands in play.')
             except:
@@ -121,7 +121,7 @@ class Player:
         # Player's play
         else:
             while hand_ct < num_hands:
-                hand = self.hands[hand_ct]
+                hand = self.hands[hand_ct] if not self.hands[hand_ct].is_split else self.hands[hand_ct - 1]
                 hand.in_play = True
                 display_table(f'Action to {self.name}.')
 
@@ -182,7 +182,7 @@ class Player:
                             spl_hand = hand.split(hand_ct, cur_deck, bankroll)
                             if not isinstance(spl_hand, Hand):
                                 continue
-                            self.add_hand(spl_hand)
+                            self.add_hand(hand_ct - 1, spl_hand)
                             num_hands += 1
                             display_table(f'{self.name} splits a pair.')
                         case _:
@@ -260,10 +260,10 @@ class Hand:
         self.is_blackjack = False
         self.is_bust = False
         self.is_doubled_down = False
+        self.is_split = False
+        self.is_hidden = False
         if self.owner.is_dealer:
             self.is_hidden = True
-        else:
-            self.is_hidden = False
 
     def __str__(self):
         hand_repr = ''
@@ -346,7 +346,8 @@ class Hand:
                 subhand.draw(cur_deck)
                 display_table(f'{self.owner.name} splits a pair.', 0.25)
             
-            bankroll.add_bet(bankroll.get_bet_amt(cur_idx))
+            bankroll.add_bet(cur_idx - 1, bankroll.get_bet_amt(cur_idx))
+            self.is_split = True
             return subhand
         # No money no hand
         return None
@@ -427,8 +428,8 @@ class Bankroll:
     def ins_resolve(self):
         self.ins_resolved = True
 
-    def add_bet(self, bet):
-        self.bets.append(bet)
+    def add_bet(self, idx, bet):
+        self.bets.insert(idx, bet)
 
     # Lose moni
     def bet(self, amount):
@@ -458,7 +459,7 @@ class Bankroll:
                 if bet_amt[::-1].find('.') > 2:
                     raise ValueError('Max two decimal places.')
                 if self.bet(float(bet_amt)):
-                    self.add_bet(float(bet_amt))
+                    self.add_bet(idx, float(bet_amt))
                     self.set_bet_amt(float(bet_amt), idx)
             except:
                 print('Invalid Input.')
@@ -541,14 +542,14 @@ while(game_on):
     new_deck = Deck()
     new_deck.shuffle()
     dealer_hand = Hand(dealer)
-    dealer.add_hand(dealer_hand)
+    dealer.add_hand(0, dealer_hand)
     
     # Bettin phase
-    num_hands = player_one.setup_hands()
+    num_hands = player_one.setup_hands(player_one_chips)
     for i in range(int(num_hands)):
         new_hand = Hand(player_one)
         player_one_chips.place_bets(new_hand, i, int(num_hands))
-        player_one.add_hand(new_hand)
+        player_one.add_hand(i, new_hand)
     player_one_chips.calc_total_bet_amt()
     
     # Deal in the proper order (one each hand, Dealer's hole, one each hand, Dealer's faceup)
@@ -585,4 +586,4 @@ while(game_on):
     continue
 
 print("\n**GAME OVER**")
-sleep(3)
+sleep(1.5)
