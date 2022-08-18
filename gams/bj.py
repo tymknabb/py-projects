@@ -262,7 +262,7 @@ class Hand:
         self.is_doubled_down = False
         self.is_hidden = False
         if self.owner.is_dealer:
-            self.is_hidden = True           
+            self.is_hidden = True
 
     def __str__(self):
         hand_repr = ''

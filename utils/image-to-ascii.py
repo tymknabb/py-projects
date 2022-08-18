@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from PIL import Image
+from re import search
 import argparse
 
 # Usage: image-to-ascii.py [ -r ] [ IMAGE FILE ]
@@ -46,6 +47,8 @@ if __name__ == '__main__':
 
     path = args.path
     try:
+        if not search('\.(png|jpe?g|bmp|tiff)$', path):
+            raise ValueError('Must be an image file.')
         img = Image.open(path)
         img.load()
     except:
