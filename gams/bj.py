@@ -91,11 +91,11 @@ class Player:
     def add_hand(self, new_hand):
         self.hands.append(new_hand)
 
-    def setup_hands(self):
+    def setup_hands(self, bankroll):
         num_hands = ''
         while not search('^\d$', num_hands):
             try:
-                num_hands = input(f'Play how many hands? (Max: 4)\n')
+                num_hands = input(f'{self.name} has ${bankroll.get_chips():.2f} in chips.\nPlay how many hands? (Max: 4)\n')
                 if int(num_hands) > 4:
                     raise ValueError('Max four hands in play.')
             except:
@@ -260,10 +260,9 @@ class Hand:
         self.is_blackjack = False
         self.is_bust = False
         self.is_doubled_down = False
+        self.is_hidden = False
         if self.owner.is_dealer:
-            self.is_hidden = True
-        else:
-            self.is_hidden = False
+            self.is_hidden = True           
 
     def __str__(self):
         hand_repr = ''
@@ -544,7 +543,7 @@ while(game_on):
     dealer.add_hand(dealer_hand)
     
     # Bettin phase
-    num_hands = player_one.setup_hands()
+    num_hands = player_one.setup_hands(player_one_chips)
     for i in range(int(num_hands)):
         new_hand = Hand(player_one)
         player_one_chips.place_bets(new_hand, i, int(num_hands))
@@ -585,4 +584,4 @@ while(game_on):
     continue
 
 print("\n**GAME OVER**")
-sleep(3)
+sleep(1.5)
