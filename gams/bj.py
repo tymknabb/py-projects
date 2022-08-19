@@ -182,7 +182,6 @@ class Player:
                             spl_hand = hand.split(hand_ct, cur_deck, bankroll)
                             if not isinstance(spl_hand, Hand):
                                 continue
-                            self.add_hand(spl_hand)
                             num_hands += 1
                             display_table(f'{self.name} splits a pair.')
                         case _:
@@ -339,13 +338,13 @@ class Hand:
             # New hand object, populate with second card from first hand
             subhand = Hand(self.owner)
             subhand.add_cards(self.cards.pop())
-            display_table(f'{self.owner.name} splits a pair.')
+            self.owner.add_hand(subhand)
+            bankroll.add_bet(bankroll.get_bet_amt(cur_idx))
+            display_table(f'{self.owner.name} splits a pair.', 0.25)
             # Each hand is dealt an additional card
             for subhand in [ self, subhand ]:
                 subhand.draw(cur_deck)
                 display_table(f'{self.owner.name} splits a pair.', 0.25)
-            
-            bankroll.add_bet(bankroll.get_bet_amt(cur_idx))
             return subhand
         # No money no hand
         return None
