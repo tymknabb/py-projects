@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from os import system, name
 import numpy as np # pip install numpy
 import re
