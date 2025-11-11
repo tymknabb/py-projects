@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # BLACKJACK
 ### REV1: Refactoring, adding and integrating "Hand" object
